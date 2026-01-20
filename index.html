@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高精度 聴力周波数検査 & 耳年齢診断</title>
+    
+    <!-- Font: Roboto -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            /* Light Theme */
+            --bg-color: #f0f4f8;
+            --text-color: #2d3436;
+            --card-bg: #ffffff;
+            --primary-color: #0984e3;
+            --primary-hover: #74b9ff;
+            --accent-color: #d63031;
+            --bar-bg: #dfe6e9;
+            --shadow: 0 15px 35px rgba(0,0,0,0.1);
+            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            
+            /* Meter Colors */
+            --meter-low: #636e72;
+            --meter-mid: #00b894;
+            --meter-high: #fdcb6e;
+            --meter-ultra: #ff7675;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                /* Dark Theme */
+                --bg-color: #121212;
+                --text-color: #dfe6e9;
+                --card-bg: #1e272e;
+                --primary-color: #74b9ff;
+                --primary-hover: #0984e3;
+                --accent-color: #ff7675;
+                --bar-bg: #2d3436;
+                --shadow: 0 15px 35px rgba(0,0,0,0.4);
+            }
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            transition: var(--transition);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+        }
+
+        /* Card Styles */
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: slideIn 0.6s forwards ease-out;
+            display: none;
+            position: relative;
+            overflow: hidden;
+        }
+        .card.active { display: block; }
+
+        @keyframes slideIn { to { opacity: 1; transform: translateY(0); } }
+
+        h1 { font-weight: 900; font-size: 2.2rem; margin-bottom: 1rem; color: var(--primary-color); }
+        h2 { font-weight: 700; font-size: 1.5rem; margin-bottom: 2rem; }
+        p { margin-bottom: 1.5rem; font-weight: 300; line-height: 1.6; }
+
+        /* Buttons */
+        .btn {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+            color: white;
+            border: none;
+            padding: 18px 50px;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 700;
+            transition: var(--transition);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 350px;
+            letter-spacing: 1px;
+            margin-top: 20px;
+        }
+        .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 25px rgba(0,0,0,0.3); }
+        .btn:active { transform: translateY(1px); }
+        
+        .btn.stop {
+            background: linear-gradient(135deg, var(--accent-color), #d63031);
+        }
+        .btn.secondary {
+            background: #636e72;
+            margin-top: 40px;
+            font-size: 1rem;
+            padding: 15px 30px;
+        }
+
+        /* Meter Gauge UI */
+        .meter-container {
+            position: relative;
+            width: 300px;
+            height: 150px; /* Half circle */
+            margin: 0 auto 40px auto;
+            overflow: hidden;
+        }
+
+        .meter-bg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 300px; height: 300px;
+            border-radius: 50%;
+            background: conic-gradient(
+                from 270deg,
+                var(--meter-low) 0deg,
+                var(--meter-low) 20deg,    /* 0-100Hz approx */
+                var(--meter-mid) 20deg,
+                var(--meter-mid) 100deg,   /* 100-10kHz approx */
+                var(--meter-high) 100deg,
+                var(--meter-high) 140deg,  /* 10k-20kHz */
+                var(--meter-ultra) 140deg,
+                var(--meter-ultra) 180deg  /* 20k+ */
+            );
+            mask-image: radial-gradient(transparent 60%, black 61%);
+            -webkit-mask-image: radial-gradient(transparent 60%, black 61%);
+            transform: rotate(-90deg);
+        }
+
+        .meter-needle {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 4px;
+            height: 140px;
+            background-color: var(--text-color);
+            transform-origin: bottom center;
+            transform: rotate(-90deg); /* Start at left */
+            transition: transform 0.1s linear;
+            border-radius: 4px;
+            z-index: 10;
+        }
+        
+        .meter-needle::after {
+            content: '';
+            position: absolute;
+            bottom: -10px; left: -8px;
+            width: 20px; height: 20px;
+            background-color: var(--text-color);
+            border-radius: 50%;
+        }
+
+        .meter-labels {
+            display: flex;
+            justify-content: space-between;
+            width: 320px;
+            margin: -10px auto 30px auto;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-color);
+            opacity: 0.6;
+        }
+
+        .digital-hz {
+            font-size: 4rem;
+            font-weight: 100;
+            font-variant-numeric: tabular-nums;
+            margin-bottom: 5px;
+            color: var(--text-color);
+        }
+        .hz-unit { font-size: 1.5rem; color: var(--primary-color); font-weight: 400; }
+
+        /* Chart & Log Scale Styles */
+        .chart-container {
+            margin-top: 30px;
+            text-align: left;
+            position: relative;
+        }
+        
+        .chart-row { margin-bottom: 25px; }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .bar-track {
+            background-color: var(--bar-bg);
+            height: 14px;
+            border-radius: 10px;
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        .bar-fill {
+            position: absolute;
+            height: 100%;
+            background: linear-gradient(90deg, var(--meter-mid), var(--primary-color));
+            border-radius: 10px;
+            top: 0;
+            transition: width 1s ease-out;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .bar-fill.user {
+            background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+            height: 18px; top: -2px; z-index: 2;
+        }
+
+        .scale-axis {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--bar-bg);
+            font-size: 0.7rem;
+            color: var(--text-color);
+            opacity: 0.6;
+        }
+        
+        .scale-axis span {
+            position: relative;
+            text-align: center;
+            width: 40px;
+            transform: translateX(-50%); /* Center align tick */
+        }
+        /* Log scale positioning helpers (approximate for flex spacing or absolute) */
+        .scale-container {
+            position: relative;
+            height: 20px;
+            margin-top: 5px;
+            font-size: 0.7rem;
+            color: var(--text-color);
+            opacity: 0.6;
+            width: 100%;
+        }
+        .tick {
+            position: absolute;
+            transform: translateX(-50%);
+            bottom: 0;
+        }
+        .tick::before {
+            content: '|';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0.3;
+        }
+
+        .highlight-box {
+            background: rgba(9, 132, 227, 0.05);
+            border-left: 4px solid var(--primary-color);
+            padding: 20px;
+            text-align: left;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .result-age {
+            font-size: 3rem;
+            font-weight: 900;
+            color: var(--primary-color);
+            margin: 10px 0 30px 0;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        
+        <!-- 1. Intro Screen -->
+        <div id="intro-screen" class="card active">
+            <h1>聴力・耳年齢テスト</h1>
+            <p>0Hzからスタートし、あなたの「聞こえる範囲」を高精度に測定します。<br>動物との聴力比較も行います。</p>
+
+            <div class="highlight-box">
+                <strong>【 検査方法 】</strong><br>
+                1. 「測定開始」を押すと、メーターが動き始めます。<br>
+                2. <strong>音が聞こえ始めたら</strong>、ボタンをクリックしてください。<br>
+                3. そのまま音が高くなります。<strong>聞こえなくなったら</strong>、もう一度クリックしてください。
+            </div>
+
+            <p style="color: var(--accent-color); font-weight: 500; font-size: 0.9rem;">
+                ⚠️ 音量注意：ヘッドフォンをご使用の際は、音量を適切に下げてから開始してください。
+            </p>
+
+            <button id="start-btn" class="btn">測定を開始</button>
+        </div>
+
+        <!-- 2. Test Screen with Meter -->
+        <div id="test-screen" class="card">
+            <h2>測定中...</h2>
+            
+            <div id="instruction-text" style="font-weight: 500; height: 1.5em; color: var(--primary-color);">耳を澄ましてください...</div>
+
+            <!-- Analog Meter -->
+            <div class="meter-container">
+                <div class="meter-bg"></div>
+                <div class="meter-needle" id="needle"></div>
+            </div>
+            <div class="meter-labels">
+                <span>0</span>
+                <span>5k</span>
+                <span>10k</span>
+                <span>15k</span>
+                <span>22k</span>
+            </div>
+
+            <!-- Digital Display -->
+            <div style="margin-top: -20px; margin-bottom: 20px;">
+                <div class="digital-hz"><span id="hz-val">0</span> <span class="hz-unit">Hz</span></div>
+            </div>
+
+            <button id="action-btn" class="btn">聞こえる！</button>
+            
+            <p style="font-size: 0.8rem; margin-top: 30px; opacity: 0.7;">
+                ※フェーズ1：低音が聞こえるまで（超低速モード）<br>
+                ※フェーズ2：高音が消えるまで（通常速度）
+            </p>
+        </div>
+
+        <!-- 3. Result Screen -->
+        <div id="result-screen" class="card">
+            <h2>診断結果</h2>
+            
+            <p>あなたの耳年齢推定</p>
+            <div class="result-age" id="age-display">-- 歳</div>
+            
+            <div style="font-size: 1.2rem; margin-bottom: 40px;">
+                可聴範囲: 
+                <span style="font-weight:bold; color:var(--text-color);" id="range-display">0Hz - 0Hz</span>
+            </div>
+
+            <div class="chart-container">
+                <h3>生物学的聴力比較 (対数スケール)</h3>
+                <br>
+
+                <!-- User Bar -->
+                <div class="chart-row">
+                    <div class="chart-header">
+                        <span><span style="margin-right:5px;">👤</span>あなた</span>
+                        <span id="user-range-label" style="font-size:0.8rem; opacity:0.8;"></span>
+                    </div>
+                    <div class="bar-track">
+                        <div id="user-bar" class="bar-fill user"></div>
+                    </div>
+                </div>
+
+                <!-- Animals (Logarithmic Data) -->
+                <!-- Human Avg: 20 - 20,000 -->
+                <div class="chart-row">
+                    <div class="chart-header"><span>👥 人間 (平均)</span> <span>20Hz - 20kHz</span></div>
+                    <div class="bar-track"><div class="bar-fill" id="human-bar"></div></div>
+                </div>
+
+                <!-- Dog: 67 - 45,000 -->
+                <div class="chart-row">
+                    <div class="chart-header"><span>🐕 犬</span> <span>67Hz - 45kHz</span></div>
+                    <div class="bar-track"><div class="bar-fill" id="dog-bar"></div></div>
+                </div>
+
+                <!-- Cat: 55 - 79,000 -->
+                <div class="chart-row">
+                    <div class="chart-header"><span>🐈 猫</span> <span>55Hz - 79kHz</span></div>
+                    <div class="bar-track"><div class="bar-fill" id="cat-bar"></div></div>
+                </div>
+
+                <!-- Bat: 2k - 110k -->
+                <div class="chart-row">
+                    <div class="chart-header"><span>🦇 コウモリ</span> <span>2kHz - 110kHz</span></div>
+                    <div class="bar-track"><div class="bar-fill" id="bat-bar" style="background: linear-gradient(90deg, #636e72, #b2bec3);"></div></div>
+                </div>
+
+                <!-- Dolphin: 150 - 150k -->
+                <div class="chart-row">
+                    <div class="chart-header"><span>🐬 イルカ</span> <span>150Hz - 150kHz</span></div>
+                    <div class="bar-track"><div class="bar-fill" id="dolphin-bar" style="background: linear-gradient(90deg, #74b9ff, #0984e3);"></div></div>
+                </div>
+
+                <!-- Log Scale Axis -->
+                <div class="scale-container">
+                    <!-- Positions: 10Hz(0%), 100Hz(20%), 1k(40%), 10k(60%), 100k(80%), 1M(100%) -->
+                    <span class="tick" style="left: 0%">10</span>
+                    <span class="tick" style="left: 20%">100</span>
+                    <span class="tick" style="left: 40%">1k</span>
+                    <span class="tick" style="left: 60%">10k</span>
+                    <span class="tick" style="left: 80%">100k</span>
+                    <span class="tick" style="left: 100%">1M</span>
+                </div>
+            </div>
+
+            <button id="retry-btn" class="btn secondary">再測定する</button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Audio Context & State ---
+        let audioCtx;
+        let oscillator;
+        let gainNode;
+        let animationId;
+        
+        let currentHz = 0;
+        let minHeard = null;
+        let maxHeard = null;
+        let phase = 0; // 0:Idle, 1:Start->Hear(Slow), 2:Hear->Lost(Fast), 3:Done
+
+        const MAX_TEST_HZ = 22000;
+        const METER_MAX = 22000; // For the gauge display
+
+        // DOM Elements
+        const screens = {
+            intro: document.getElementById('intro-screen'),
+            test: document.getElementById('test-screen'),
+            result: document.getElementById('result-screen')
+        };
+        const hzDisplay = document.getElementById('hz-val');
+        const actionBtn = document.getElementById('action-btn');
+        const needle = document.getElementById('needle');
+        const instruction = document.getElementById('instruction-text');
+        
+        // Result DOMs
+        const ageDisplay = document.getElementById('age-display');
+        const rangeDisplay = document.getElementById('range-display');
+        const userBar = document.getElementById('user-bar');
+        const userRangeLabel = document.getElementById('user-range-label');
+
+        // --- Utils for Logarithmic Scale ---
+        // Map Frequency to Percentage (0% at 10Hz, 100% at 1MHz)
+        // Log10(10) = 1, Log10(1,000,000) = 6. Range = 5.
+        function getLogPercent(hz) {
+            const minLog = Math.log10(10);
+            const maxLog = Math.log10(1000000);
+            const range = maxLog - minLog;
+            
+            if (hz < 10) hz = 10;
+            const valLog = Math.log10(hz);
+            
+            let percent = ((valLog - minLog) / range) * 100;
+            return Math.max(0, Math.min(100, percent));
+        }
+
+        function setBarPosition(elementId, minHz, maxHz) {
+            const el = document.getElementById(elementId);
+            if(!el) return;
+            const left = getLogPercent(minHz);
+            const right = getLogPercent(maxHz);
+            const width = right - left;
+            el.style.left = `${left}%`;
+            el.style.width = `${width}%`;
+        }
+
+        // --- Event Listeners ---
+        document.getElementById('start-btn').addEventListener('click', () => {
+            initAudio();
+            switchScreen('test');
+            startTest();
+        });
+
+        actionBtn.addEventListener('click', handleAction);
+        document.getElementById('retry-btn').addEventListener('click', () => location.reload()); // Simple reload for clean state
+
+        // --- Core Functions ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function switchScreen(id) {
+            Object.values(screens).forEach(s => s.classList.remove('active'));
+            screens[id].classList.add('active');
+        }
+
+        function startTest() {
+            phase = 1;
+            currentHz = 10; // Start slightly above 0 for oscillator stability
+            minHeard = null;
+            maxHeard = null;
+
+            // Reset UI
+            updateMeter(0);
+            hzDisplay.innerText = "0";
+            actionBtn.innerText = "聞こえる！";
+            actionBtn.classList.remove('stop');
+            instruction.innerText = "音が聞こえ始めたらボタンを押してください";
+
+            // Audio Setup
+            oscillator = audioCtx.createOscillator();
+            gainNode = audioCtx.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.value = currentHz;
+            gainNode.gain.value = 0.05; // Safety volume
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+
+            loop();
+        }
+
+        function loop() {
+            if (phase === 0 || phase === 3) return;
+
+            // Speed Control Logic
+            if (phase === 1) {
+                // Phase 1: Finding Lower Limit
+                // Increase VERY SLOWLY to detect 20-30Hz accurately
+                // 0.2Hz per frame approx
+                currentHz += 0.2; 
+            } else if (phase === 2) {
+                // Phase 2: Finding Upper Limit
+                // Start accelerating
+                // Linear increase is safer for reaction time than exponential
+                // We make it faster than phase 1, but manageable
+                // Dynamic speed: faster as freq gets higher
+                let increment = 2;
+                if (currentHz > 1000) increment = 10;
+                if (currentHz > 5000) increment = 20;
+                if (currentHz > 12000) increment = 30;
+                
+                currentHz += increment;
+            }
+
+            // Cap at Max
+            if (currentHz >= MAX_TEST_HZ) {
+                currentHz = MAX_TEST_HZ;
+                finishTest(true);
+                return;
+            }
+
+            // Update Audio
+            oscillator.frequency.value = currentHz;
+            
+            // Update Visuals
+            hzDisplay.innerText = Math.floor(currentHz);
+            updateMeter(currentHz);
+
+            animationId = requestAnimationFrame(loop);
+        }
+
+        function updateMeter(hz) {
+            // Map 0 - 22000Hz to 0 - 180 degrees
+            const percent = Math.min(hz / METER_MAX, 1);
+            const degrees = percent * 180 - 90; // -90 to 90
+            needle.style.transform = `rotate(${degrees}deg)`;
+            
+            // Change Hz color based on range
+            if (hz < 20) hzDisplay.style.color = "var(--meter-low)";
+            else if (hz < 15000) hzDisplay.style.color = "var(--meter-mid)";
+            else if (hz < 18000) hzDisplay.style.color = "var(--meter-high)";
+            else hzDisplay.style.color = "var(--meter-ultra)";
+        }
+
+        function handleAction() {
+            if (phase === 1) {
+                // Heard sound (Lower limit)
+                minHeard = currentHz;
+                phase = 2;
+                actionBtn.innerText = "聞こえなくなった！";
+                actionBtn.classList.add('stop');
+                instruction.innerText = "音が消える瞬間まで待ってクリック";
+                instruction.style.color = "var(--accent-color)";
+            } else if (phase === 2) {
+                // Lost sound (Upper limit)
+                maxHeard = currentHz;
+                finishTest();
+            }
+        }
+
+        function finishTest(autoStop = false) {
+            phase = 3;
+            cancelAnimationFrame(animationId);
+            
+            // Smooth stop
+            if (gainNode) {
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+                setTimeout(() => {
+                    oscillator.stop(); 
+                    oscillator.disconnect();
+                }, 100);
+            }
+
+            if (autoStop) {
+                maxHeard = MAX_TEST_HZ;
+                if (minHeard === null) minHeard = 0;
+            }
+            if (minHeard === null) minHeard = 0;
+            if (maxHeard === null) maxHeard = currentHz;
+
+            showResults();
+        }
+
+        function getAge(hz) {
+            if (hz >= 19000) return "10代以下 (超優秀)";
+            if (hz >= 17000) return "18〜24歳";
+            if (hz >= 16000) return "25〜29歳";
+            if (hz >= 15000) return "30〜39歳";
+            if (hz >= 14000) return "40〜49歳";
+            if (hz >= 12000) return "50〜59歳";
+            if (hz >= 9000)  return "60代";
+            if (hz >= 6000)  return "70代";
+            return "80代以上";
+        }
+
+        function showResults() {
+            const min = Math.floor(minHeard);
+            const max = Math.floor(maxHeard);
+
+            ageDisplay.innerText = getAge(max);
+            rangeDisplay.innerText = `${min}Hz 〜 ${max}Hz`;
+            userRangeLabel.innerText = `${min}Hz - ${max}Hz`;
+
+            // Draw Charts (Logarithmic)
+            setBarPosition('user-bar', min, max);
+            setBarPosition('human-bar', 20, 20000);
+            setBarPosition('dog-bar', 67, 45000);
+            setBarPosition('cat-bar', 55, 79000);
+            setBarPosition('bat-bar', 2000, 110000);
+            setBarPosition('dolphin-bar', 150, 150000);
+
+            switchScreen('result');
+        }
+    </script>
+</body>
+</html>
